@@ -1,4 +1,4 @@
-This README file contains information on the contents of the meta-myapp layer.
+This README file contains information on the contents of the meta-awsapp layer.
 
 Please see the corresponding sections below for details.
 
@@ -18,7 +18,7 @@ Dependencies
 Patches
 =======
 
-Please submit any patches against the meta-myapp layer to the xxxx mailing list (xxxx@zzzz.org)
+Please submit any patches against the meta-awsapp layer to the xxxx mailing list (xxxx@zzzz.org)
 and cc: the maintainer:
 
 Maintainer: XXX YYYYYY <xxx.yyyyyy@zzzzz.com>
@@ -26,16 +26,16 @@ Maintainer: XXX YYYYYY <xxx.yyyyyy@zzzzz.com>
 Table of Contents
 =================
 
-  I. Adding the meta-myapp layer to your build
+  I. Adding the meta-awsapp layer to your build
  II. Misc
 
 
-I. Adding the meta-myapp layer to your build
+I. Adding the meta-awsapp layer to your build
 =================================================
 
-Run 'bitbake-layers add-layer meta-myapp'
+Run 'bitbake-layers add-layer meta-awsapp'
 
 II. Misc
 ========
 
---- replace with specific information about the meta-myapp layer ---
+--- replace with specific information about the meta-awsapp layer ---

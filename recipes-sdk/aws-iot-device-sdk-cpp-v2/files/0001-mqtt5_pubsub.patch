@@ -1,0 +1,156 @@
+diff --git a/main.cpp b/main.cpp
+index 9870a25..75fbc69 100644
+--- a/main.cpp
++++ b/main.cpp
+@@ -11,6 +11,14 @@
+ 
+ #include "../../utils/CommandLineUtils.h"
+ 
++#include <unistd.h>
++#include <sys/types.h>
++#include <sys/socket.h>
++#include <sys/un.h>
++
++#define RECV_SOCKET_NAME "/tmp/aws_socket_rmsg"
++#define SEND_SOCKET_NAME "/tmp/aws_socket_smsg"
++
+ using namespace Aws::Crt;
+ 
+ int main(int argc, char *argv[])
+@@ -93,10 +101,36 @@ int main(int argc, char *argv[])
+ 
+             std::lock_guard<std::mutex> lock(receiveMutex);
+             ++receivedCount;
+-            fprintf(stdout, "Publish received on topic %s:", eventData.publishPacket->getTopic().c_str());
++            fprintf(stdout, "Subscribe received on topic %s:", eventData.publishPacket->getTopic().c_str());
+             fwrite(eventData.publishPacket->getPayload().ptr, 1, eventData.publishPacket->getPayload().len, stdout);
+             fprintf(stdout, "\n");
+ 
++            int client_sock;
++            struct sockaddr_un server_addr;
++            memset(&server_addr, 0, sizeof(server_addr));
++
++            client_sock = socket(AF_UNIX, SOCK_STREAM, 0);
++            if (client_sock > 0)
++            {
++                server_addr.sun_family = AF_UNIX;
++                strncpy(server_addr.sun_path, RECV_SOCKET_NAME, sizeof(server_addr.sun_path));
++                if (connect(client_sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) == 0)
++                {
++                    int len = strlen((const char *)eventData.publishPacket->getPayload().ptr);
++                    int nsend = send(client_sock, eventData.publishPacket->getPayload().ptr, len, 0);
++                    if(nsend == len) {
++                        fprintf(stdout, "send message to %s.\n", RECV_SOCKET_NAME);
++                    } else {
++                        fprintf(stdout, "send() failed(%d byte: %d).\n", nsend, errno);
++                    }
++                } else {
++                //    fprintf(stdout, "connect() failed(%d).\n", errno);
++                }
++                close(client_sock);
++            } else {
++                fprintf(stdout, "socket() failed(%d).\n", errno);
++            }
++
+             for (Mqtt5::UserProperty prop : eventData.publishPacket->getUserProperties())
+             {
+                 fprintf(stdout, "\twith UserProperty:(%s,%s)\n", prop.getName().c_str(), prop.getValue().c_str());
+@@ -196,27 +230,94 @@ int main(int argc, char *argv[])
+                     };
+                 };
+ 
++                int server_sock;
++                struct sockaddr_un server_addr;
++                memset(&server_addr, 0, sizeof(server_addr));
++
++                server_sock = socket(AF_UNIX, SOCK_STREAM, 0);
++                if (server_sock < 0)
++                {
++                    fprintf(stdout, "socket() failed(%d).\n", errno);
++                    exit(-1);
++                }
++                unlink(SEND_SOCKET_NAME);
++                server_addr.sun_family = AF_UNIX;
++                strncpy(server_addr.sun_path, SEND_SOCKET_NAME, sizeof(server_addr.sun_path));
++                if (bind(server_sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
++                {
++                    fprintf(stdout, "bind() failed(%d).\n", errno);
++                    exit(-1);
++                }
++                if (listen(server_sock, 5))
++                {
++                    fprintf(stdout, "listen() failed(%d).\n", errno);
++                    exit(-1);
++                }
++
+                 uint32_t publishedCount = 0;
+                 while (publishedCount < cmdData.input_count)
+                 {
++                    int client_sock;
++                    struct sockaddr_un client_addr;
++                    socklen_t len = sizeof(client_addr);
++                    char buffer[1024];
++                    int nrecv;
++                    char *saveptr, *line1, *line2;
++
++                    memset(&client_addr, 0, sizeof(client_addr));
++                    client_sock = accept(server_sock, (struct sockaddr *)&client_addr, &len);
++                    if (client_sock < 0)
++                    {
++                        fprintf(stdout, "accept() failed(%d).\n", errno);
++                        ++publishedCount;
++                        continue;
++                    }
++
++                    nrecv = recv(client_sock, buffer, sizeof(buffer)-1, 0);
++                    if (nrecv < 0) {
++                        fprintf(stdout, "recv() failed(%d).\n", errno);
++                        close(client_sock);
++                        ++publishedCount;
++                        continue;
++                    }
++                    buffer[nrecv] = '\0';
++
+                     // Add \" to 'JSON-ify' the message
+-                    String message = "\"" + cmdData.input_message + std::to_string(publishedCount + 1).c_str() + "\"";
++                    // String message = "\"" + cmdData.input_message + std::to_string(publishedCount + 1).c_str() + "\"";
++
++                    // message format:
++                    //   <topic>\n<message>
++                    line1 = strtok_r(buffer, "\n", &saveptr);
++                    line2 = strtok_r(NULL, "", &saveptr);
++                    if(!line1 || !line2) {
++                        fprintf(stdout, "Publish message format error.\nline1=%s\nline2=%s\n", line1, line2);
++                        close(client_sock);
++                        ++publishedCount;
++                        continue;
++                    }
++
++                    Aws::Crt::String publish_topic = Aws::Crt::String(line1);
++                    String message = String(line2);
+                     ByteCursor payload = ByteCursorFromString(message);
+ 
+                     std::shared_ptr<Mqtt5::PublishPacket> publish = std::make_shared<Mqtt5::PublishPacket>(
+-                        cmdData.input_topic, payload, Mqtt5::QOS::AWS_MQTT5_QOS_AT_LEAST_ONCE);
++                        publish_topic, payload, Mqtt5::QOS::AWS_MQTT5_QOS_AT_LEAST_ONCE);
+                     if (client->Publish(publish, onPublishComplete))
+                     {
++                        fprintf(stdout, "Publish Sending to topic %s:%s\n", line1, line2);
++                        close(client_sock);  // receive message one time
+                         ++publishedCount;
+                     }
+-
+-                    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                 }
++                close(server_sock);
++                unlink(SEND_SOCKET_NAME);
+ 
++                #if 0   // This program does not need to wait, because Subscribe thread does not wait same topic.
+                 {
+                     std::unique_lock<std::mutex> receivedLock(receiveMutex);
+                     receiveSignal.wait(receivedLock, [&] { return receivedCount >= cmdData.input_count; });
+                 }
++                #endif
+ 
+                 // Unsubscribe from the topic.
+                 std::promise<void> unsubscribeFinishedPromise;

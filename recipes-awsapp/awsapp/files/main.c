@@ -188,11 +188,15 @@ int main(int argc, char *argv[])
 
 	if(argc != 4) {
 		fprintf(stderr, "[usage]\n" \
-		 				"awsapp send <socket_name> <file>\n" \
-						"awsapp recv <socket_name> <number>\n" \
+		 				"awsapp send <socket_name> <message-file>\n" \
+						"awsapp recv <socket_name> <number-of-receiving messages>\n" \
+						"\n" \
+						"<message-file>: \n" \
+						"   line 1 is published topic, and line 2..n are message\n" \
+						"\n" \
 						"ex)\n" \
-						"awsapp send /tmp/aws_socket_rmsg ./message.txt\n"
-						"awsapp recv /tmp/aws_socket_smsg  10000\n");
+						"awsapp send /tmp/aws_socket_smsg ./message.txt\n" \
+						"awsapp recv /tmp/aws_socket_rmsg  10000\n");
 		exit(1);
 	}
 

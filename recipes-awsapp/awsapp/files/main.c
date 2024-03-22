@@ -99,7 +99,7 @@ void send_message(char *socket_name, char *message)
 	}
 
 	server_addr.sun_family = AF_UNIX;
-	strncpy(server_addr.sun_path, socket_name, sizeof(server_addr.sun_path));
+	strncpy(server_addr.sun_path, socket_name, sizeof(server_addr.sun_path)-1);
 	if (connect(client_sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) != 0){
 	    fprintf(stdout, "connect() failed(%s).\n", strerror(errno));
 		close(client_sock);
@@ -138,7 +138,7 @@ void recv_message(char *socket_name, int maxloop)
 		return;
 	}
 	server_addr.sun_family = AF_UNIX;
-	strncpy(server_addr.sun_path, socket_name, sizeof(server_addr.sun_path));
+	strncpy(server_addr.sun_path, socket_name, sizeof(server_addr.sun_path)-1);
 	if (bind(server_sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)	{
 		fprintf(stdout, "bind() failed(%s).\n", strerror(errno));
 		exit(-1);
